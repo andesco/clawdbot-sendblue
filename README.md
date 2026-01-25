@@ -10,7 +10,7 @@ This plugin connects clawdbot to [Sendblue](https://sendblue.co), letting you ch
 
 - [clawdbot](https://clawd.bot) installed and running
 - [Node.js](https://nodejs.org) 18+
-- A Sendblue account (free tier available)
+- A free Sendblue account
 
 ## Setup
 
@@ -94,6 +94,9 @@ If you don't get a response, make sure you're texting **from** the number you pu
 | `allowFrom` | Recommended | Your phone number(s) that can text the bot |
 | `dmPolicy` | No | `"allowlist"` (default), `"open"`, or `"disabled"` |
 | `pollIntervalMs` | No | How often to check for new messages in ms (default: 5000) |
+| `webhook.enabled` | No | Enable webhook server for real-time messages (default: false) |
+| `webhook.port` | No | Port for webhook server (default: 3141) |
+| `webhook.path` | No | URL path for webhook endpoint (default: `/webhook/sendblue`) |
 
 ### Access Control
 
@@ -112,6 +115,37 @@ To allow **anyone** to text the bot:
 
 To **disable** the channel entirely, set `dmPolicy: "disabled"`.
 
+### Webhook Mode (Optional)
+
+By default, the plugin polls Sendblue every 5 seconds for new messages. For faster, real-time message delivery, you can enable webhook mode:
+
+```json
+"config": {
+  "apiKey": "...",
+  "apiSecret": "...",
+  "phoneNumber": "...",
+  "allowFrom": ["..."],
+  "webhook": {
+    "enabled": true,
+    "port": 3141
+  }
+}
+```
+
+When webhook mode is enabled:
+
+1. The plugin starts an HTTP server on the specified port
+2. You need to configure Sendblue to send webhooks to your server
+3. Messages arrive instantly instead of waiting for the next poll
+
+**To set up webhooks:**
+
+1. Make sure your server is publicly accessible (you may need a reverse proxy like ngrok, Cloudflare Tunnel, or a public server)
+2. In your Sendblue dashboard, set the webhook URL to: `https://your-server.com:3141/webhook/sendblue`
+3. Restart the clawdbot gateway
+
+> **Note:** If your server isn't publicly accessible, stick with polling mode (the default).
+
 ## Troubleshooting
 
 **Not receiving messages**
@@ -129,6 +163,7 @@ To **disable** the channel entirely, set `dmPolicy: "disabled"`.
 
 ## How It Works
 
+**Polling mode (default):**
 ```
 Your Phone
     │
@@ -142,7 +177,21 @@ clawdbot + this plugin
 Sendblue → Your Phone
 ```
 
-The plugin polls Sendblue for new messages every 5 seconds (configurable). When you text the Sendblue number, the plugin picks it up, sends it to clawdbot for processing, and sends the AI's response back via Sendblue.
+**Webhook mode:**
+```
+Your Phone
+    │
+    ▼ iMessage/SMS
+Sendblue (cloud)
+    │
+    ▼ instant webhook POST
+clawdbot + this plugin
+    │
+    ▼ AI response
+Sendblue → Your Phone
+```
+
+In polling mode, the plugin checks Sendblue for new messages every 5 seconds (configurable). In webhook mode, Sendblue pushes messages to your server instantly. Either way, the AI's response is sent back via the Sendblue API.
 
 ## License
 

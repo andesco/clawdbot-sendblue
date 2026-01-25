@@ -10,6 +10,12 @@ export interface SendblueChannelConfig {
   allowFrom?: string[];
   pollIntervalMs?: number;
   dmPolicy?: 'allowlist' | 'open' | 'disabled';
+  // Webhook configuration
+  webhook?: {
+    enabled: boolean;
+    port?: number;        // Default: 3141
+    path?: string;        // Default: /webhook/sendblue
+  };
 }
 
 // Sendblue API message format

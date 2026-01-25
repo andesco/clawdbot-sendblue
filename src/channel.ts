@@ -11,15 +11,18 @@ import {
   addConversationMessage,
   cleanupOldProcessedMessages,
 } from './db.js';
+import { startWebhookServer, stopWebhookServer } from './webhook.js';
 import type { SendblueChannelConfig, SendblueMessage } from './types.js';
 
-// Polling state
+// State
 let pollInterval: NodeJS.Timeout | null = null;
+let cleanupInterval: NodeJS.Timeout | null = null;
 let lastPollTime: Date = new Date(Date.now() - 60 * 1000);
 let isPolling = false;
 let sendblueClient: SendblueClient | null = null;
 let channelConfig: SendblueChannelConfig | null = null;
 let clawdbotApi: any = null;
+let webhookEnabled = false;
 
 // Logger helper - uses api.logger if available, falls back to console
 function log(level: 'info' | 'warn' | 'error', message: string): void {
@@ -33,14 +36,9 @@ function log(level: 'info' | 'warn' | 'error', message: string): void {
 }
 
 /**
- * Start polling for inbound messages
+ * Initialize the Sendblue service (shared setup for both polling and webhook modes)
  */
-function startPolling(api: any, config: SendblueChannelConfig): void {
-  if (pollInterval) {
-    log('info', 'Polling already running');
-    return;
-  }
-
+function initializeService(api: any, config: SendblueChannelConfig): void {
   clawdbotApi = api;
   channelConfig = config;
   sendblueClient = new SendblueClient({
@@ -51,19 +49,52 @@ function startPolling(api: any, config: SendblueChannelConfig): void {
 
   initDb();
 
-  const intervalMs = config.pollIntervalMs || 5000;
-  log('info', `Starting polling (interval: ${intervalMs}ms)`);
   log('info', `Phone: ${config.phoneNumber}`);
   log('info', `Allowlist: ${config.allowFrom?.join(', ') || '(open)'}`);
+
+  // Cleanup old messages periodically
+  cleanupInterval = setInterval(() => cleanupOldProcessedMessages(), 60 * 60 * 1000);
+}
+
+/**
+ * Start webhook server for real-time message delivery
+ */
+function startWebhook(config: SendblueChannelConfig): void {
+  const port = config.webhook?.port || 3141;
+  const path = config.webhook?.path || '/webhook/sendblue';
+
+  log('info', `Starting webhook server on port ${port}`);
+
+  startWebhookServer({
+    port,
+    path,
+    onMessage: processMessage,
+    logger: {
+      info: (msg) => log('info', msg),
+      error: (msg) => log('error', msg),
+    },
+  });
+
+  webhookEnabled = true;
+}
+
+/**
+ * Start polling for inbound messages
+ */
+function startPolling(): void {
+  if (pollInterval) {
+    log('info', 'Polling already running');
+    return;
+  }
+
+  const intervalMs = channelConfig?.pollIntervalMs || 5000;
+  log('info', `Starting polling (interval: ${intervalMs}ms)`);
 
   // Initial poll
   poll();
 
   // Start interval
   pollInterval = setInterval(poll, intervalMs);
-
-  // Cleanup old messages periodically
-  setInterval(() => cleanupOldProcessedMessages(), 60 * 60 * 1000);
 }
 
 /**
@@ -78,14 +109,40 @@ function stopPolling(): void {
 }
 
 /**
+ * Stop all services (polling, webhook, cleanup)
+ */
+async function stopAllServices(): Promise<void> {
+  stopPolling();
+
+  if (webhookEnabled) {
+    log('info', 'Stopping webhook server...');
+    await stopWebhookServer();
+    webhookEnabled = false;
+  }
+
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
+
+/**
  * Export for service registration
  */
 export function startSendblueService(api: any, config: SendblueChannelConfig): void {
-  startPolling(api, config);
+  initializeService(api, config);
+
+  if (config.webhook?.enabled) {
+    startWebhook(config);
+    log('info', 'Using webhook mode for real-time messages');
+  } else {
+    startPolling();
+    log('info', 'Using polling mode for messages');
+  }
 }
 
-export function stopSendblueService(): void {
-  stopPolling();
+export async function stopSendblueService(): Promise<void> {
+  await stopAllServices();
 }
 
 /**
@@ -289,20 +346,12 @@ export function createSendblueChannel(api: any) {
     gateway: {
       start: async (...args: any[]) => {
         log('info', `gateway.start called with ${args.length} args`);
-        for (let i = 0; i < args.length; i++) {
-          const arg = args[i];
-          if (typeof arg === 'object' && arg !== null) {
-            log('info', `  arg[${i}] keys: ${Object.keys(arg).join(', ')}`);
-          } else {
-            log('info', `  arg[${i}]: ${typeof arg}`);
-          }
-        }
         const config = args[0] as SendblueChannelConfig;
-        startPolling(api, config);
+        startSendblueService(api, config);
       },
       stop: async () => {
         log('info', 'Channel stopping...');
-        stopPolling();
+        await stopSendblueService();
       },
     },
   };
