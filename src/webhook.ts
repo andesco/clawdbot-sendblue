@@ -5,6 +5,9 @@
 import http from 'http';
 import type { SendblueMessage } from './types.js';
 
+// Maximum request body size (1MB)
+const MAX_BODY_SIZE = 1024 * 1024;
+
 export interface WebhookServerConfig {
   port: number;
   path: string;
@@ -18,6 +21,22 @@ export interface WebhookServerConfig {
 let server: http.Server | null = null;
 
 /**
+ * Validate that the payload has required SendblueMessage fields
+ */
+function isValidSendbluePayload(payload: unknown): payload is SendblueMessage {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  const obj = payload as Record<string, unknown>;
+  return (
+    typeof obj.message_handle === 'string' &&
+    typeof obj.from_number === 'string' &&
+    obj.message_handle.length > 0 &&
+    obj.from_number.length > 0
+  );
+}
+
+/**
  * Start the webhook server
  */
 export function startWebhookServer(config: WebhookServerConfig): void {
@@ -29,7 +48,7 @@ export function startWebhookServer(config: WebhookServerConfig): void {
     return;
   }
 
-  server = http.createServer(async (req, res) => {
+  server = http.createServer((req, res) => {
     // Health check endpoint
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -44,26 +63,62 @@ export function startWebhookServer(config: WebhookServerConfig): void {
       return;
     }
 
-    // Collect request body
+    // Collect request body with size limit
     let body = '';
-    req.on('data', chunk => {
+    let bodyTooLarge = false;
+
+    req.on('data', (chunk: Buffer) => {
+      if (bodyTooLarge) return;
+
       body += chunk.toString();
+      if (body.length > MAX_BODY_SIZE) {
+        bodyTooLarge = true;
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Payload too large' }));
+        req.destroy();
+      }
+    });
+
+    req.on('error', (err) => {
+      log.error(`[Webhook] Request error: ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end();
+      }
     });
 
     req.on('end', async () => {
-      // Respond immediately to avoid duplicate webhook calls from Sendblue
+      if (bodyTooLarge || res.headersSent) return;
+
+      // Parse and validate JSON before responding
+      let payload: unknown;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        return;
+      }
+
+      // Validate required fields
+      if (!isValidSendbluePayload(payload)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid payload: missing required fields' }));
+        return;
+      }
+
+      // Respond 200 OK - payload is valid, we'll process it
+      // This prevents Sendblue from retrying
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ received: true }));
 
+      // Only process inbound messages
+      if (payload.is_outbound) {
+        return;
+      }
+
       try {
-        const payload = JSON.parse(body) as SendblueMessage;
-
-        // Only process inbound messages
-        if (payload.is_outbound) {
-          return;
-        }
-
-        log.info(`[Webhook] Received message from ${payload.from_number?.slice(-4) || 'unknown'}`);
+        log.info(`[Webhook] Received message from ${payload.from_number.slice(-4)}`);
         await onMessage(payload);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);

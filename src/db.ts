@@ -66,6 +66,21 @@ export function markMessageProcessed(messageId: string): void {
   ).run(messageId, Date.now());
 }
 
+/**
+ * Atomically check if a message is processed and mark it if not.
+ * Returns true if the message was newly marked (should be processed).
+ * Returns false if it was already processed (should be skipped).
+ * This prevents race conditions in concurrent webhook/polling scenarios.
+ */
+export function tryMarkMessageProcessed(messageId: string): boolean {
+  const database = initDb();
+  const result = database.prepare(
+    'INSERT OR IGNORE INTO processed_messages (message_id, processed_at) VALUES (?, ?)'
+  ).run(messageId, Date.now());
+  // changes > 0 means the insert succeeded (message was not already processed)
+  return result.changes > 0;
+}
+
 export function cleanupOldProcessedMessages(olderThanMs: number = 7 * 24 * 60 * 60 * 1000): void {
   const database = initDb();
   const cutoff = Date.now() - olderThanMs;

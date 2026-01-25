@@ -6,8 +6,7 @@
 import { SendblueClient } from './sendblue.js';
 import {
   initDb,
-  isMessageProcessed,
-  markMessageProcessed,
+  tryMarkMessageProcessed,
   addConversationMessage,
   cleanupOldProcessedMessages,
 } from './db.js';
@@ -193,11 +192,21 @@ async function poll(): Promise<void> {
  * Process an inbound message
  */
 async function processMessage(msg: SendblueMessage): Promise<void> {
-  if (isMessageProcessed(msg.message_handle)) return;
-  markMessageProcessed(msg.message_handle);
+  // Validate required fields
+  if (!msg.message_handle || !msg.from_number) {
+    log('error', 'Invalid message: missing message_handle or from_number');
+    return;
+  }
+
+  // Atomic deduplication - prevents race conditions with concurrent webhooks/polling
+  if (!tryMarkMessageProcessed(msg.message_handle)) {
+    return; // Already processed
+  }
+
+  const fromNumberDisplay = msg.from_number.slice(-4);
 
   if (!isAllowed(msg.from_number)) {
-    log('info', `Blocked message from ${msg.from_number.slice(-4)}`);
+    log('info', `Blocked message from ${fromNumberDisplay}`);
     return;
   }
 
@@ -213,7 +222,7 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
     messageContent = content ? `${content}\n\n${mediaNotice}` : mediaNotice;
   }
 
-  log('info', `Inbound from ${msg.from_number.slice(-4)}: "${messageContent.substring(0, 50)}..."`);
+  log('info', `Inbound from ${fromNumberDisplay}: "${messageContent.substring(0, 50)}..."`);
 
   // Mark message as read
   try {
@@ -264,7 +273,7 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
           if (payload.text) {
             await sendblueClient?.sendMessage(msg.from_number, payload.text);
             addConversationMessage(msg.from_number, channelConfig!.phoneNumber, payload.text, true);
-            log('info', `Reply sent to ${msg.from_number.slice(-4)}`);
+            log('info', `Reply sent to ${fromNumberDisplay}`);
           }
         },
         onReplyStart: async () => {
