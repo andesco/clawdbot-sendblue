@@ -31,16 +31,21 @@ npm run build
 
 ### Step 3: Configure
 
-Edit `~/.clawdbot/clawdbot.json` (create it if it doesn't exist):
+Edit `~/.clawdbot/clawdbot.json` and add the plugin config:
 
 ```json
 {
-  "channels": {
-    "sendblue": {
-      "apiKey": "sb-api-key-xxxxx",
-      "apiSecret": "sb-secret-xxxxx",
-      "phoneNumber": "+15551234567",
-      "allowFrom": ["+15559876543"]
+  "plugins": {
+    "entries": {
+      "sendblue": {
+        "enabled": true,
+        "config": {
+          "apiKey": "sb-api-key-xxxxx",
+          "apiSecret": "sb-secret-xxxxx",
+          "phoneNumber": "+15551234567",
+          "allowFrom": ["+15559876543"]
+        }
+      }
     }
   }
 }
@@ -52,7 +57,7 @@ Replace:
 - `phoneNumber` → your Sendblue phone number
 - `allowFrom` → your personal phone number(s) that can text the bot
 
-> **Note:** If you already have a `clawdbot.json`, just add the `sendblue` section inside `channels`.
+> **Note:** If you already have a `clawdbot.json`, merge this into your existing `plugins.entries` section.
 
 ### Step 4: Restart Clawdbot
 
@@ -84,12 +89,17 @@ By default, only numbers in `allowFrom` can text the bot. To let anyone text:
 
 ```json
 {
-  "channels": {
-    "sendblue": {
-      "apiKey": "...",
-      "apiSecret": "...",
-      "phoneNumber": "...",
-      "dmPolicy": "open"
+  "plugins": {
+    "entries": {
+      "sendblue": {
+        "enabled": true,
+        "config": {
+          "apiKey": "...",
+          "apiSecret": "...",
+          "phoneNumber": "...",
+          "dmPolicy": "open"
+        }
+      }
     }
   }
 }

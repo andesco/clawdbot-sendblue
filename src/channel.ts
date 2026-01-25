@@ -172,7 +172,8 @@ export function createSendblueChannel(api: any) {
     // Configuration handlers
     config: {
       listAccountIds: (_cfg: any) => ['default'],
-      resolveAccount: (cfg: any, _accountId: string) => cfg.channels?.sendblue ?? cfg,
+      resolveAccount: (cfg: any, _accountId: string) =>
+        cfg.plugins?.entries?.sendblue?.config ?? cfg.channels?.sendblue ?? cfg,
     },
 
     // Capabilities
