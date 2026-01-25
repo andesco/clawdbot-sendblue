@@ -13,11 +13,19 @@ import { createSendblueChannel, startSendblueService, stopSendblueService } from
 export default function register(api: any) {
   const log = api.logger || console;
 
-  // Debug: log available API methods one by one
+  // Debug: log available API methods
   const keys = Object.keys(api);
-  log.info(`[Sendblue Plugin] API has ${keys.length} methods:`);
-  for (const key of keys) {
-    log.info(`[Sendblue Plugin]   - ${key}: ${typeof api[key]}`);
+  log.info(`[Sendblue Plugin] API has ${keys.length} methods: ${keys.join(', ')}`);
+
+  // Explore runtime object
+  if (api.runtime) {
+    const runtimeKeys = Object.keys(api.runtime);
+    log.info(`[Sendblue Plugin] runtime has: ${runtimeKeys.join(', ')}`);
+  }
+
+  // Check pluginConfig
+  if (api.pluginConfig) {
+    log.info(`[Sendblue Plugin] pluginConfig keys: ${Object.keys(api.pluginConfig).join(', ')}`);
   }
 
   log.info('[Sendblue Plugin] Registering channel...');
