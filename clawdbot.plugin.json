@@ -3,6 +3,7 @@
   "name": "Sendblue iMessage/SMS",
   "description": "Send and receive iMessages/SMS via Sendblue API",
   "version": "1.0.0",
+  "channels": ["sendblue"],
   "configSchema": {
     "type": "object",
     "properties": {
