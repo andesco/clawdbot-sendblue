@@ -17,14 +17,21 @@ export default function register(api: any) {
   const keys = Object.keys(api);
   log.info(`[Sendblue Plugin] API has ${keys.length} methods: ${keys.join(', ')}`);
 
-  // Explore runtime.channel - this is likely how we dispatch inbound messages
-  if (api.runtime?.channel) {
-    const channelKeys = Object.keys(api.runtime.channel);
-    log.info(`[Sendblue Plugin] runtime.channel has: ${channelKeys.join(', ')}`);
+  // Explore runtime.channel.text - likely for dispatching text messages
+  if (api.runtime?.channel?.text) {
+    const textKeys = Object.keys(api.runtime.channel.text);
+    log.info(`[Sendblue Plugin] channel.text has: ${textKeys.join(', ')}`);
+    for (const key of textKeys) {
+      log.info(`[Sendblue Plugin]   text.${key}: ${typeof api.runtime.channel.text[key]}`);
+    }
+  }
 
-    // Log types of each method
-    for (const key of channelKeys) {
-      log.info(`[Sendblue Plugin]   channel.${key}: ${typeof api.runtime.channel[key]}`);
+  // Explore runtime.channel.routing
+  if (api.runtime?.channel?.routing) {
+    const routingKeys = Object.keys(api.runtime.channel.routing);
+    log.info(`[Sendblue Plugin] channel.routing has: ${routingKeys.join(', ')}`);
+    for (const key of routingKeys) {
+      log.info(`[Sendblue Plugin]   routing.${key}: ${typeof api.runtime.channel.routing[key]}`);
     }
   }
 
