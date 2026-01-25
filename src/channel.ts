@@ -21,12 +21,23 @@ let sendblueClient: SendblueClient | null = null;
 let channelConfig: SendblueChannelConfig | null = null;
 let clawdbotApi: any = null;
 
+// Logger helper - uses api.logger if available, falls back to console
+function log(level: 'info' | 'warn' | 'error', message: string): void {
+  const prefix = '[Sendblue]';
+  if (clawdbotApi?.logger) {
+    clawdbotApi.logger[level](`${prefix} ${message}`);
+  } else {
+    const fn = level === 'error' ? console.error : console.log;
+    fn(`${prefix} ${message}`);
+  }
+}
+
 /**
  * Start polling for inbound messages
  */
 function startPolling(api: any, config: SendblueChannelConfig): void {
   if (pollInterval) {
-    console.log('[Sendblue] Polling already running');
+    log('info', 'Polling already running');
     return;
   }
 
@@ -41,9 +52,9 @@ function startPolling(api: any, config: SendblueChannelConfig): void {
   initDb();
 
   const intervalMs = config.pollIntervalMs || 5000;
-  console.log(`[Sendblue] Starting polling (interval: ${intervalMs}ms)`);
-  console.log(`[Sendblue] Phone: ${config.phoneNumber}`);
-  console.log(`[Sendblue] Allowlist: ${config.allowFrom?.join(', ') || '(open)'}`);
+  log('info', `Starting polling (interval: ${intervalMs}ms)`);
+  log('info', `Phone: ${config.phoneNumber}`);
+  log('info', `Allowlist: ${config.allowFrom?.join(', ') || '(open)'}`);
 
   // Initial poll
   poll();
@@ -62,7 +73,7 @@ function stopPolling(): void {
   if (pollInterval) {
     clearInterval(pollInterval);
     pollInterval = null;
-    console.log('[Sendblue] Polling stopped');
+    log('info', 'Polling stopped');
   }
 }
 
@@ -104,7 +115,7 @@ async function poll(): Promise<void> {
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[Sendblue] Poll error:', errorMsg);
+    log('error', `Poll error: ${errorMsg}`);
   } finally {
     isPolling = false;
   }
@@ -118,7 +129,7 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
   markMessageProcessed(msg.message_handle);
 
   if (!isAllowed(msg.from_number)) {
-    console.log(`[Sendblue] Blocked message from ${msg.from_number.slice(-4)}`);
+    log('info', `Blocked message from ${msg.from_number.slice(-4)}`);
     return;
   }
 
@@ -134,7 +145,7 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
     messageContent = content ? `${content}\n\n${mediaNotice}` : mediaNotice;
   }
 
-  console.log(`[Sendblue] Inbound from ${msg.from_number.slice(-4)}: "${messageContent.substring(0, 50)}..."`);
+  log('info', `Inbound from ${msg.from_number.slice(-4)}: "${messageContent.substring(0, 50)}..."`);
 
   // Store in conversation history
   addConversationMessage(msg.from_number, msg.from_number, messageContent, false);
@@ -157,6 +168,9 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
  * Create the Sendblue channel plugin
  */
 export function createSendblueChannel(api: any) {
+  // Store api reference early for logging
+  clawdbotApi = api;
+
   return {
     // Identity & Metadata
     id: 'sendblue',
@@ -186,18 +200,18 @@ export function createSendblueChannel(api: any) {
       deliveryMode: 'direct',
       sendText: async ({ text, chatId }: { text: string; chatId: string }) => {
         if (!sendblueClient) {
-          console.error('[Sendblue] Client not initialized');
+          log('error', 'Client not initialized');
           return { ok: false, error: 'Client not initialized' };
         }
 
         try {
           await sendblueClient.sendMessage(chatId, text);
           addConversationMessage(chatId, channelConfig!.phoneNumber, text, true);
-          console.log(`[Sendblue] Sent to ${chatId.slice(-4)}: "${text.substring(0, 50)}..."`);
+          log('info', `Sent to ${chatId.slice(-4)}: "${text.substring(0, 50)}..."`);
           return { ok: true };
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error('[Sendblue] Send error:', errorMsg);
+          log('error', `Send error: ${errorMsg}`);
           return { ok: false, error: errorMsg };
         }
       },
@@ -206,11 +220,11 @@ export function createSendblueChannel(api: any) {
     // Gateway adapter for lifecycle
     gateway: {
       start: async (config: SendblueChannelConfig) => {
-        console.log('[Sendblue] Channel starting...');
+        log('info', 'Channel starting...');
         startPolling(api, config);
       },
       stop: async () => {
-        console.log('[Sendblue] Channel stopping...');
+        log('info', 'Channel stopping...');
         stopPolling();
       },
     },

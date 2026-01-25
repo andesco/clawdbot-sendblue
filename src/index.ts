@@ -11,10 +11,12 @@ import { createSendblueChannel } from './channel.js';
  * Called by clawdbot to register the plugin
  */
 export default function register(api: any) {
-  console.log('[Sendblue Plugin] Registering channel...');
+  const log = api.logger || console;
+
+  log.info('[Sendblue Plugin] Registering channel...');
 
   const channel = createSendblueChannel(api);
   api.registerChannel({ plugin: channel });
 
-  console.log('[Sendblue Plugin] Channel registered');
+  log.info('[Sendblue Plugin] Channel registered');
 }
