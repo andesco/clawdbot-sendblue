@@ -10,16 +10,26 @@ This plugin connects clawdbot to [Sendblue](https://sendblue.co), letting you ch
 
 - [clawdbot](https://clawd.bot) installed and running
 - [Node.js](https://nodejs.org) 18+
-- A Sendblue account with API access
+- A Sendblue account (free tier available)
 
 ## Setup
 
-### Step 1: Get Sendblue Credentials
+### Step 1: Create a Sendblue Account
 
-1. Sign up at [sendblue.co](https://sendblue.co) and subscribe to get API access
-2. Go to **Dashboard** and find your API credentials
-3. Copy your **API Key** and **API Secret**
-4. Note your **Sendblue phone number** (the number Sendblue assigned to you)
+Sendblue offers a free tier for getting started.
+
+1. Go to [sendblue.com/api](https://sendblue.com/api)
+2. Click **"Try for free"** (or go directly to [dashboard.sendblue.com/company-signup](https://dashboard.sendblue.com/company-signup))
+3. Fill out the signup form:
+   - Enter your email and create a password
+   - Provide basic company/project info
+4. Verify your email if prompted
+5. Once logged into the dashboard, you'll see:
+   - **API Key** - copy this (used as `apiKey` in config)
+   - **API Secret** - copy this (used as `apiSecret` in config)
+   - **Your Sendblue phone number** - this is the number people will text (used as `phoneNumber` in config)
+
+> **Note:** The free tier has usage limits. Check [sendblue.com](https://sendblue.com) for current pricing if you need higher volume.
 
 ### Step 2: Install the Plugin
 
