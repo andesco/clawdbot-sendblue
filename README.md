@@ -29,24 +29,24 @@ npm run build
 
 Create or edit `~/.clawdbot/clawdbot.json` (create the file if it doesn't exist):
 
-```json5
+```json
 {
-  channels: {
-    sendblue: {
-      adapter: {
-        command: "node",
-        args: ["/path/to/clawdbot-sendblue/dist/index.js"],
-        env: {
-          SENDBLUE_API_KEY: "sb-api-key-xxxxx",
-          SENDBLUE_API_SECRET: "sb-secret-xxxxx",
-          SENDBLUE_PHONE_NUMBER: "+15551234567",
-          SENDBLUE_ALLOWLIST: "+15559876543,+15551111111",
-          SENDBLUE_POLL_INTERVAL_MS: "5000",
-          PORT: "18790"
+  "channels": {
+    "sendblue": {
+      "adapter": {
+        "command": "node",
+        "args": ["/path/to/clawdbot-sendblue/dist/index.js"],
+        "env": {
+          "SENDBLUE_API_KEY": "sb-api-key-xxxxx",
+          "SENDBLUE_API_SECRET": "sb-secret-xxxxx",
+          "SENDBLUE_PHONE_NUMBER": "+15551234567",
+          "SENDBLUE_ALLOWLIST": "+15559876543,+15551111111",
+          "SENDBLUE_POLL_INTERVAL_MS": "5000",
+          "PORT": "18790"
         }
       },
-      allowFrom: ["+15559876543", "+15551111111"],
-      dmPolicy: "allowlist"
+      "allowFrom": ["+15559876543", "+15551111111"],
+      "dmPolicy": "allowlist"
     }
   }
 }
