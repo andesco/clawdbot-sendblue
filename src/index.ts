@@ -17,28 +17,17 @@ export default function register(api: any) {
   const keys = Object.keys(api);
   log.info(`[Sendblue Plugin] API has ${keys.length} methods: ${keys.join(', ')}`);
 
-  // Explore runtime.channel.session
-  if (api.runtime?.channel?.session) {
-    const sessionKeys = Object.keys(api.runtime.channel.session);
-    log.info(`[Sendblue Plugin] channel.session has: ${sessionKeys.join(', ')}`);
+  // Check what an existing channel (telegram) looks like
+  if (api.runtime?.channel?.telegram) {
+    const telegramKeys = Object.keys(api.runtime.channel.telegram);
+    log.info(`[Sendblue Plugin] telegram channel has: ${telegramKeys.join(', ')}`);
   }
 
-  // Explore runtime.channel.activity
-  if (api.runtime?.channel?.activity) {
-    const activityKeys = Object.keys(api.runtime.channel.activity);
-    log.info(`[Sendblue Plugin] channel.activity has: ${activityKeys.join(', ')}`);
-  }
+  // Check what registerChannel returns - maybe it gives us a dispatcher?
+  log.info(`[Sendblue Plugin] registerChannel returns: ${typeof api.registerChannel({plugin: {id:'test'}})}`);
 
-  // Explore runtime directly for dispatch/message methods
-  const runtimeKeys = Object.keys(api.runtime);
-  log.info(`[Sendblue Plugin] runtime keys: ${runtimeKeys.join(', ')}`);
-
-  // Check if 'on' is an event emitter - maybe we can emit events
-  if (typeof api.on === 'function') {
-    log.info(`[Sendblue Plugin] api.on exists - checking if emit exists too`);
-    log.info(`[Sendblue Plugin] api.emit: ${typeof api.emit}`);
-    log.info(`[Sendblue Plugin] api.dispatch: ${typeof api.dispatch}`);
-  }
+  // Check if there's a sendblue channel after registration
+  // (we'll log this again after registering)
 
   // Check pluginConfig
   if (api.pluginConfig) {
