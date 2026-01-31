@@ -62,18 +62,18 @@ function initializeService(api: any, config: SendblueChannelConfig): void {
  * Handle delivery status webhook callback
  */
 async function handleStatusCallback(payload: StatusCallbackPayload): Promise<void> {
-  const { message_handle, status, error_message } = payload;
+  const { message_handle, status, to_number, error_message, error_reason } = payload;
   const terminal = isTerminalSendblueStatus(status);
 
   log('info', `Status callback ${message_handle.slice(-8)}: ${status}${terminal ? ' (terminal)' : ''}`);
 
-  if (error_message) {
-    log('warn', `Status error for ${message_handle.slice(-8)}: ${error_message}`);
+  if (error_message || error_reason) {
+    log('warn', `Status error for ${message_handle.slice(-8)}: ${error_message || error_reason}`);
   }
 
   upsertOutboundMessageStatus({
     messageHandle: message_handle,
-    chatId: '', // Will be preserved by upsert if already exists
+    chatId: to_number || '', // to_number is the recipient for outbound messages
     status,
     isTerminal: terminal,
     lastChecked: Date.now(),
@@ -385,16 +385,15 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
 
 /**
  * Check if a delivery status is terminal (no more updates expected)
+ * Sendblue statuses: REGISTERED, PENDING, DECLINED, QUEUED, ACCEPTED, SENT, DELIVERED, ERROR
  */
 function isTerminalSendblueStatus(status: string): boolean {
-  const s = (status || '').toLowerCase();
+  const s = (status || '').toUpperCase();
   return (
-    s === 'delivered' ||
-    s === 'read' ||
-    s === 'failed' ||
-    s === 'undelivered' ||
-    s === 'canceled' ||
-    s === 'cancelled'
+    s === 'DELIVERED' ||
+    s === 'SENT' ||      // Terminal for SMS
+    s === 'ERROR' ||
+    s === 'DECLINED'
   );
 }
 

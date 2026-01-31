@@ -69,8 +69,12 @@ class InMemoryRateLimiter {
 export interface StatusCallbackPayload {
   message_handle: string;
   status: string;
-  error_code?: string;
-  error_message?: string;
+  is_outbound: boolean;
+  from_number?: string;
+  to_number?: string;
+  error_code?: string | null;
+  error_message?: string | null;
+  error_reason?: string | null;
 }
 
 export interface WebhookServerConfig {
@@ -109,8 +113,14 @@ function isValidSendbluePayload(payload: unknown): payload is SendblueMessage {
 }
 
 /**
- * Check if payload is a status callback (has message_handle and status, but no from_number)
+ * Check if payload is a status callback for an outbound message.
+ * Status callbacks have is_outbound=true and a delivery status field.
  */
+const DELIVERY_STATUSES = new Set([
+  'REGISTERED', 'PENDING', 'DECLINED', 'QUEUED',
+  'ACCEPTED', 'SENT', 'DELIVERED', 'ERROR'
+]);
+
 function isStatusCallbackPayload(payload: unknown): payload is StatusCallbackPayload {
   if (typeof payload !== 'object' || payload === null) {
     return false;
@@ -120,7 +130,8 @@ function isStatusCallbackPayload(payload: unknown): payload is StatusCallbackPay
     typeof obj.message_handle === 'string' &&
     typeof obj.status === 'string' &&
     obj.message_handle.length > 0 &&
-    !obj.from_number // Status callbacks don't have from_number
+    obj.is_outbound === true &&
+    DELIVERY_STATUSES.has(obj.status.toUpperCase())
   );
 }
 
