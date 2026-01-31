@@ -76,7 +76,7 @@ export class SendblueClient {
   /**
    * Send an iMessage
    */
-  async sendMessage(toNumber: string, content: string, mediaUrl?: string): Promise<{ messageId: string }> {
+  async sendMessage(toNumber: string, content: string, mediaUrl?: string, statusCallback?: string): Promise<{ messageId: string }> {
     const body: Record<string, string> = {
       number: toNumber,
       content: content,
@@ -85,6 +85,10 @@ export class SendblueClient {
 
     if (mediaUrl) {
       body.media_url = mediaUrl;
+    }
+
+    if (statusCallback) {
+      body.status_callback = statusCallback;
     }
 
     const response = await fetch(`${SENDBLUE_API_BASE}/send-message`, {
@@ -242,7 +246,8 @@ export class SendblueClient {
   async sendMessageWithAttachment(
     toNumber: string,
     content: string,
-    attachment: { filePath?: string; buffer?: Buffer; url?: string; filename?: string }
+    attachment: { filePath?: string; buffer?: Buffer; url?: string; filename?: string },
+    statusCallback?: string
   ): Promise<{ messageId: string }> {
     let mediaUrl: string;
 
@@ -256,6 +261,6 @@ export class SendblueClient {
       throw new Error('Attachment must have filePath, buffer+filename, or url');
     }
 
-    return this.sendMessage(toNumber, content, mediaUrl);
+    return this.sendMessage(toNumber, content, mediaUrl, statusCallback);
   }
 }

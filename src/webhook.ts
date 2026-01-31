@@ -66,6 +66,13 @@ class InMemoryRateLimiter {
 
 // --- Webhook Server ---
 
+export interface StatusCallbackPayload {
+  message_handle: string;
+  status: string;
+  error_code?: string;
+  error_message?: string;
+}
+
 export interface WebhookServerConfig {
   port: number;
   path: string;
@@ -75,6 +82,7 @@ export interface WebhookServerConfig {
     maxRequests?: number;
   };
   onMessage: (message: SendblueMessage) => Promise<void>;
+  onStatusCallback?: (payload: StatusCallbackPayload) => Promise<void>;
   logger?: {
     info: (msg: string) => void;
     error: (msg: string) => void;
@@ -97,6 +105,22 @@ function isValidSendbluePayload(payload: unknown): payload is SendblueMessage {
     typeof obj.from_number === 'string' &&
     obj.message_handle.length > 0 &&
     obj.from_number.length > 0
+  );
+}
+
+/**
+ * Check if payload is a status callback (has message_handle and status, but no from_number)
+ */
+function isStatusCallbackPayload(payload: unknown): payload is StatusCallbackPayload {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  const obj = payload as Record<string, unknown>;
+  return (
+    typeof obj.message_handle === 'string' &&
+    typeof obj.status === 'string' &&
+    obj.message_handle.length > 0 &&
+    !obj.from_number // Status callbacks don't have from_number
   );
 }
 
@@ -129,7 +153,7 @@ function verifySecret(req: http.IncomingMessage, expectedSecret: string): boolea
  * Start the webhook server
  */
 export function startWebhookServer(config: WebhookServerConfig): void {
-  const { port, path, secret, rateLimit: rateLimitConfig, onMessage, logger } = config;
+  const { port, path, secret, rateLimit: rateLimitConfig, onMessage, onStatusCallback, logger } = config;
   const log = logger || { info: console.log, error: console.error };
 
   if (server) {
@@ -216,7 +240,23 @@ export function startWebhookServer(config: WebhookServerConfig): void {
         return;
       }
 
-      // Validate required fields
+      // Check if this is a status callback
+      if (isStatusCallbackPayload(payload)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ received: true }));
+
+        if (onStatusCallback) {
+          try {
+            await onStatusCallback(payload);
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            log.error(`[Webhook] Error processing status callback: ${errorMsg}`);
+          }
+        }
+        return;
+      }
+
+      // Validate required fields for inbound message
       if (!isValidSendbluePayload(payload)) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid payload: missing required fields' }));

@@ -10,19 +10,18 @@ import {
   addConversationMessage,
   cleanupOldProcessedMessages,
   upsertOutboundMessageStatus,
-  listPendingOutboundStatuses,
 } from './db.js';
 import { startWebhookServer, stopWebhookServer } from './webhook.js';
+import type { StatusCallbackPayload } from './webhook.js';
 import type { SendblueChannelConfig, SendblueMessage } from './types.js';
 
 // State
 let pollInterval: NodeJS.Timeout | null = null;
 let cleanupInterval: NodeJS.Timeout | null = null;
-let statusInterval: NodeJS.Timeout | null = null;
 let lastPollTime: Date = new Date(Date.now() - 60 * 1000);
 let isPolling = false;
-let isReconcilingStatus = false;
 let sendblueClient: SendblueClient | null = null;
+let statusCallbackUrl: string | null = null;
 let channelConfig: SendblueChannelConfig | null = null;
 let clawdbotApi: any = null;
 let webhookEnabled = false;
@@ -57,10 +56,28 @@ function initializeService(api: any, config: SendblueChannelConfig): void {
 
   // Cleanup old messages periodically
   cleanupInterval = setInterval(() => cleanupOldProcessedMessages(), 60 * 60 * 1000);
+}
 
-  // Reconcile outbound delivery status periodically
-  // (Keep this fairly low-frequency to avoid rate limits)
-  statusInterval = setInterval(() => reconcileOutboundStatuses(), 20 * 1000);
+/**
+ * Handle delivery status webhook callback
+ */
+async function handleStatusCallback(payload: StatusCallbackPayload): Promise<void> {
+  const { message_handle, status, error_message } = payload;
+  const terminal = isTerminalSendblueStatus(status);
+
+  log('info', `Status callback ${message_handle.slice(-8)}: ${status}${terminal ? ' (terminal)' : ''}`);
+
+  if (error_message) {
+    log('warn', `Status error for ${message_handle.slice(-8)}: ${error_message}`);
+  }
+
+  upsertOutboundMessageStatus({
+    messageHandle: message_handle,
+    chatId: '', // Will be preserved by upsert if already exists
+    status,
+    isTerminal: terminal,
+    lastChecked: Date.now(),
+  });
 }
 
 /**
@@ -70,6 +87,15 @@ function startWebhook(config: SendblueChannelConfig): void {
   const port = config.webhook?.port || 3141;
   const path = config.webhook?.path || '/webhook/sendblue';
 
+  // Build the status callback URL for outbound messages
+  const baseUrl = config.webhook?.baseUrl;
+  if (baseUrl) {
+    statusCallbackUrl = `${baseUrl}${path}`;
+    log('info', `Status callback URL: ${statusCallbackUrl}`);
+  } else {
+    log('warn', 'No webhook.baseUrl configured - delivery status webhooks disabled');
+  }
+
   log('info', `Starting webhook server on port ${port}`);
 
   startWebhookServer({
@@ -78,6 +104,7 @@ function startWebhook(config: SendblueChannelConfig): void {
     secret: config.webhook?.secret,
     rateLimit: config.webhook?.rateLimit,
     onMessage: processMessage,
+    onStatusCallback: handleStatusCallback,
     logger: {
       info: (msg) => log('info', msg),
       error: (msg) => log('error', msg),
@@ -132,11 +159,6 @@ async function stopAllServices(): Promise<void> {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
     cleanupInterval = null;
-  }
-
-  if (statusInterval) {
-    clearInterval(statusInterval);
-    statusInterval = null;
   }
 }
 
@@ -290,9 +312,12 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
 
           // If the agent produced media, upload+send it.
           if (media) {
-            const result = await sendblueClient?.sendMessageWithAttachment(msg.from_number, text, {
-              url: media,
-            });
+            const result = await sendblueClient?.sendMessageWithAttachment(
+              msg.from_number,
+              text,
+              { url: media },
+              statusCallbackUrl || undefined
+            );
 
             if (result?.messageId) {
               upsertOutboundMessageStatus({
@@ -316,7 +341,12 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
 
           // Otherwise send plain text.
           if (text) {
-            const result = await sendblueClient?.sendMessage(msg.from_number, text);
+            const result = await sendblueClient?.sendMessage(
+              msg.from_number,
+              text,
+              undefined,
+              statusCallbackUrl || undefined
+            );
 
             if (result?.messageId) {
               upsertOutboundMessageStatus({
@@ -354,11 +384,10 @@ async function processMessage(msg: SendblueMessage): Promise<void> {
 }
 
 /**
- * Create the Sendblue channel plugin
+ * Check if a delivery status is terminal (no more updates expected)
  */
 function isTerminalSendblueStatus(status: string): boolean {
   const s = (status || '').toLowerCase();
-  // We don't have official enumerations here; treat common terminal states as terminal.
   return (
     s === 'delivered' ||
     s === 'read' ||
@@ -369,48 +398,9 @@ function isTerminalSendblueStatus(status: string): boolean {
   );
 }
 
-async function reconcileOutboundStatuses(): Promise<void> {
-  if (isReconcilingStatus || !sendblueClient) return;
-
-  try {
-    isReconcilingStatus = true;
-
-    const pending = listPendingOutboundStatuses(25);
-    if (pending.length === 0) return;
-
-    for (const row of pending) {
-      try {
-        const status = await sendblueClient.getMessageStatus(row.message_handle);
-        const terminal = isTerminalSendblueStatus(status);
-
-        // Only log when it changes.
-        if (status && status !== row.status) {
-          log('info', `Status ${row.message_handle.slice(-8)}: ${row.status} -> ${status}`);
-        }
-
-        upsertOutboundMessageStatus({
-          messageHandle: row.message_handle,
-          chatId: row.chat_id,
-          status: status || row.status,
-          isTerminal: terminal,
-          lastChecked: Date.now(),
-        });
-      } catch (e) {
-        // Don't mark terminal; just update last_checked so we don't tight-loop on failures.
-        upsertOutboundMessageStatus({
-          messageHandle: row.message_handle,
-          chatId: row.chat_id,
-          status: row.status,
-          isTerminal: false,
-          lastChecked: Date.now(),
-        });
-      }
-    }
-  } finally {
-    isReconcilingStatus = false;
-  }
-}
-
+/**
+ * Create the Sendblue channel plugin
+ */
 export function createSendblueChannel(api: any) {
   // Store api reference early for logging
   clawdbotApi = api;
@@ -449,7 +439,12 @@ export function createSendblueChannel(api: any) {
         }
 
         try {
-          const result = await sendblueClient.sendMessage(chatId, text);
+          const result = await sendblueClient.sendMessage(
+            chatId,
+            text,
+            undefined,
+            statusCallbackUrl || undefined
+          );
 
           if (result?.messageId) {
             upsertOutboundMessageStatus({
@@ -487,9 +482,12 @@ export function createSendblueChannel(api: any) {
         }
 
         try {
-          const result = await sendblueClient.sendMessageWithAttachment(chatId, text ?? '', {
-            url: mediaUrl,
-          });
+          const result = await sendblueClient.sendMessageWithAttachment(
+            chatId,
+            text ?? '',
+            { url: mediaUrl },
+            statusCallbackUrl || undefined
+          );
 
           if (result?.messageId) {
             upsertOutboundMessageStatus({
