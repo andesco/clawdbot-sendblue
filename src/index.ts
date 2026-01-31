@@ -13,18 +13,18 @@ import { createSendblueChannel, startSendblueService, stopSendblueService } from
 export default function register(api: any) {
   const log = api.logger || console;
 
-  log.info('[Sendblue Plugin] Registering channel...');
+  log.debug?.('[Sendblue Plugin] Registering channel...');
 
   const channel = createSendblueChannel(api);
   api.registerChannel({ plugin: channel });
 
-  log.info('[Sendblue Plugin] Channel registered');
+  log.debug?.('[Sendblue Plugin] Channel registered');
 
   // Register service to handle polling lifecycle
   api.registerService({
     id: 'sendblue-poller',
     start: () => {
-      log.info('[Sendblue Plugin] Service starting...');
+      log.debug?.('[Sendblue Plugin] Service starting...');
       const config = api.pluginConfig;
       if (config) {
         startSendblueService(api, config);
@@ -33,10 +33,10 @@ export default function register(api: any) {
       }
     },
     stop: () => {
-      log.info('[Sendblue Plugin] Service stopping...');
+      log.debug?.('[Sendblue Plugin] Service stopping...');
       stopSendblueService();
     },
   });
 
-  log.info('[Sendblue Plugin] Service registered');
+  log.debug?.('[Sendblue Plugin] Service registered');
 }
