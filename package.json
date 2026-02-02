@@ -1,7 +1,7 @@
 {
   "name": "sendblue",
   "version": "1.0.0",
-  "description": "Clawdbot plugin for iMessage/SMS via Sendblue API",
+  "description": "OpenClaw plugin for iMessage/SMS via Sendblue API",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -25,7 +25,7 @@
     "node": ">=18"
   },
   "keywords": [
-    "clawdbot",
+    "openclaw",
     "plugin",
     "sendblue",
     "imessage",
